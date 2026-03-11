@@ -4,7 +4,8 @@ on:
 push:
 branches: [ "production" ]
 
-permissions: contents: write
+permissions:
+   contents: write
 
 env:
 APPVAULT_REPO: "abhinav0014/app-vault"
