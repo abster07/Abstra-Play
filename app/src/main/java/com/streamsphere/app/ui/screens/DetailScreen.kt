@@ -1122,24 +1122,28 @@ private fun rememberExoPlayer(
     onError: (String) -> Unit
 ): ExoPlayer? = remember(streamUrl) {
     if (streamUrl == null) return@remember null
+    
+    val renderersFactory = DefaultRenderersFactory(context).apply {
+        setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+    }
+    
     ExoPlayer.Builder(context).build().apply {
         volume = 1f
-        val dataSourceFactory =
-            DefaultHttpDataSource.Factory()
+        val dataSourceFactory = DefaultHttpDataSource.Factory()
                 .setUserAgent("Mozilla/5.0 (Linux; Android) VLC/3.0")
                 .setDefaultRequestProperties(
-    mapOf(
-        "Accept" to "*/*",
-        "Connection" to "keep-alive"
-    )
-)
+                    mapOf(
+                        "Accept"     to "*/*",
+                        "Connection" to "keep-alive"
+                    )
+                )
                 .setAllowCrossProtocolRedirects(true)
-                .setConnectTimeoutMs(15000)
-                .setReadTimeoutMs(15000)
-        
-        val src = HlsMediaSource.Factory(dataSourceFactory)
-    .setAllowChunklessPreparation(true)
-    .createMediaSource(MediaItem.fromUri(Uri.parse(streamUrl)))
+                .setConnectTimeoutMs(15_000)
+                .setReadTimeoutMs(15_000)
+
+            val src = HlsMediaSource.Factory(dataSourceFactory)
+                .setAllowChunklessPreparation(true)
+                .createMediaSource(MediaItem.fromUri(Uri.parse(streamUrl)))
         setMediaSource(src)
         prepare()
         playWhenReady = autoPlay
