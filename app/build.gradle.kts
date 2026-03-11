@@ -16,11 +16,12 @@ android {
         versionCode = 1
         versionName = "1.0"
     }
+
     splits {
         abi {
-            enable true
-            reset()
-            include "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+            isEnable = true
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            isUniversalApk = false
         }
     }
     
@@ -48,12 +49,12 @@ android {
           signingConfig = signingConfigs.getByName("release")
         }
     }
-    
+
     applicationVariants.all { variant ->
-        variant.outputs.all {
-            val appId = project.findProperty("APP_ID") ?: "myapp"
-            if (outputFileName.endsWith(".apk")) {
-                outputFileName = "$appId.apk"
+        variant.outputs.all { output ->
+            val appId = project.property("APP_ID")
+            if (output is com.android.build.gradle.internal.api.BaseVariantOutputImpl) {
+                output.outputFileName = "$appId.apk"
             }
         }
     }
