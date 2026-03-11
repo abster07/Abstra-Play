@@ -1128,7 +1128,7 @@ private fun rememberExoPlayer(
         setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
     }
     
-    ExoPlayer.Builder(context).build().apply {
+    ExoPlayer.Builder(context, renderersFactory).build().apply {
         volume = 1f
         val dataSourceFactory = DefaultHttpDataSource.Factory()
                 .setUserAgent("Mozilla/5.0 (Linux; Android) VLC/3.0")
