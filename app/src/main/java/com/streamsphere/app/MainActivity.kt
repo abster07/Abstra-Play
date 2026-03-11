@@ -21,6 +21,12 @@ import com.streamsphere.app.ui.screens.*
 import com.streamsphere.app.ui.theme.StreamSphereTheme
 import dagger.hilt.android.AndroidEntryPoint
 
+
+
+
+
+
+
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
@@ -37,9 +43,11 @@ class MainActivity : ComponentActivity() {
 
         val startChannelId  = intent?.getStringExtra(EXTRA_CHANNEL_ID)
         val startFullscreen = intent?.getBooleanExtra(EXTRA_FULLSCREEN, false) ?: false
-
+        
+        val darkMode by settingsViewModel.darkMode.collectAsState()
+        
         setContent {
-            StreamSphereTheme {
+            StreamSphereTheme(darkTheme = darkMode) {
                 StreamSphereUI(
                     startChannelId  = startChannelId,
                     startFullscreen = startFullscreen
