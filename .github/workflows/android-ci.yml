@@ -33,18 +33,29 @@ jobs:
       - name: Grant execute permission
         run: chmod +x ./gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
+      - name: Build Release APK
+        run: ./gradlew assembleRelease
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS:         ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD:      ${{ secrets.KEY_PASSWORD }}
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: app-release
+          path: app/build/outputs/apk/release/app-release.apk
+
+      - name: Create GitHub Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "build-${{ github.run_number }}"
+          name: "Release build #${{ github.run_number }}"
+          body: "Automated release from commit ${{ github.sha }}"
+          files: app/build/outputs/apk/release/app-release.apk
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Convert app icon to PNG
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -54,7 +65,6 @@ jobs:
           ICON_SRC="app/src/main/res/drawable/ic_splash_logo.xml"
           ICON_OUT="icon.png"
 
-          # Inkscape can render Android VectorDrawable XML directly
           if [ -f "$ICON_SRC" ]; then
             inkscape "$ICON_SRC" \
               --export-type=png \
@@ -64,7 +74,6 @@ jobs:
               2>/dev/null || true
           fi
 
-          # Fallback: generate a solid-colour placeholder if conversion failed
           if [ ! -s "$ICON_OUT" ]; then
             sudo apt-get install -y imagemagick 2>/dev/null || true
             convert -size 256x256 \
@@ -111,15 +120,17 @@ jobs:
           print(total)
           ")
 
-          # APK file size in human-readable form
-          APK_SIZE=$(du -sh app/build/outputs/apk/debug/app-debug.apk \
+          APK_SIZE=$(du -sh app/build/outputs/apk/release/app-release.apk \
             2>/dev/null | cut -f1 || echo "?")
 
-          echo "stars=$STARS"         >> $GITHUB_OUTPUT
-          echo "downloads=$DOWNLOADS" >> $GITHUB_OUTPUT
-          echo "apk_size=$APK_SIZE"   >> $GITHUB_OUTPUT
+          # Permanent direct download URL from the GitHub Release
+          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/build-${{ github.run_number }}/app-release.apk"
 
-      # ── 9. Read app-metadata.json (rich info defined in this repo) ────────
+          echo "stars=$STARS"               >> $GITHUB_OUTPUT
+          echo "downloads=$DOWNLOADS"       >> $GITHUB_OUTPUT
+          echo "apk_size=$APK_SIZE"         >> $GITHUB_OUTPUT
+          echo "download_url=$DOWNLOAD_URL" >> $GITHUB_OUTPUT
+
       - name: Read app-metadata.json
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         id: appmeta
@@ -130,7 +141,6 @@ jobs:
             echo "found=false" >> $GITHUB_OUTPUT
           fi
 
-      # ── 10. Checkout AppVault site repo ───────────────────────────────────
       - name: Checkout AppVault repo
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/checkout@v4
@@ -139,7 +149,6 @@ jobs:
           token: ${{ secrets.APPVAULT_TOKEN }}
           path: appvault
 
-      # ── 11. Copy icon into AppVault icons/ folder ─────────────────────────
       - name: Copy icon to AppVault
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
@@ -148,7 +157,6 @@ jobs:
             cp icon.png "appvault/icons/${{ env.APP_ID }}.png"
           fi
 
-      # ── 12. Upsert entry in apps.json ─────────────────────────────────────
       - name: Update apps.json
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
@@ -159,40 +167,30 @@ jobs:
 
           JSON_PATH = "apps.json"
           META_PATH = f"../{os.environ.get('APP_ID', 'app')}-metadata.json"
-          # also look for app-metadata.json in the checked-out source
           if not os.path.exists(META_PATH):
               META_PATH = "../app-metadata.json"
 
-          # Load existing registry
           try:
               with open(JSON_PATH) as f:
                   apps = json.load(f)
           except (FileNotFoundError, json.JSONDecodeError):
               apps = []
 
-          # Load rich metadata from this app's repo (if present)
           try:
               with open(META_PATH) as f:
                   meta = json.load(f)
           except (FileNotFoundError, json.JSONDecodeError):
               meta = {}
 
-          app_id    = os.environ["APP_ID"]
-          stars     = int(os.environ["STARS"])
-          downloads = int(os.environ["DOWNLOADS"])
-          apk_size  = os.environ["APK_SIZE"]
-          sha       = os.environ["GITHUB_SHA"][:7]
-          repo      = os.environ["GITHUB_REPOSITORY"]
-          today     = datetime.date.today().isoformat()
+          app_id       = os.environ["APP_ID"]
+          stars        = int(os.environ["STARS"])
+          downloads    = int(os.environ["DOWNLOADS"])
+          apk_size     = os.environ["APK_SIZE"]
+          sha          = os.environ["GITHUB_SHA"][:7]
+          repo         = os.environ["GITHUB_REPOSITORY"]
+          today        = datetime.date.today().isoformat()
+          download_url = os.environ["DOWNLOAD_URL"]
 
-          # Build download URL pointing to the latest debug APK artifact
-          # (update to a release URL if you switch to assembleRelease)
-          download_url = meta.get(
-              "downloadUrl",
-              f"https://github.com/{repo}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
-          )
-
-          # Icon path served by AppVault site
           icon_url = f"icons/{app_id}.png"
 
           entry = {
@@ -224,13 +222,13 @@ jobs:
           print(f"✓ Upserted {app_id} in apps.json")
           PYEOF
         env:
-          APP_ID:       ${{ env.APP_ID }}
-          STARS:        ${{ steps.stats.outputs.stars }}
-          DOWNLOADS:    ${{ steps.stats.outputs.downloads }}
-          APK_SIZE:     ${{ steps.stats.outputs.apk_size }}
+          APP_ID:        ${{ env.APP_ID }}
+          STARS:         ${{ steps.stats.outputs.stars }}
+          DOWNLOADS:     ${{ steps.stats.outputs.downloads }}
+          APK_SIZE:      ${{ steps.stats.outputs.apk_size }}
+          DOWNLOAD_URL:  ${{ steps.stats.outputs.download_url }}
           GITHUB_RUN_ID: ${{ github.run_id }}
 
-      # ── 13. Commit & push AppVault update ─────────────────────────────────
       - name: Publish to AppVault
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
