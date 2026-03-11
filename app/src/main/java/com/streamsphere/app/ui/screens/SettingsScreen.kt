@@ -17,11 +17,11 @@ import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     val context       = LocalContext.current
-    var darkMode      by remember { mutableStateOf(true) }
-    var notifications by remember { mutableStateOf(false) }
-    var compactView   by remember { mutableStateOf(false) }
+    val darkMode      by viewModel.darkMode.collectAsState()
+    val compactView   by viewModel.compactView.collectAsState()
+    val notifications by viewModel.notifications.collectAsState()
 
     Scaffold(
         topBar = {

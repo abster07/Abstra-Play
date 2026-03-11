@@ -36,7 +36,10 @@ object AppModule {
 
     @Provides @Singleton
     fun provideApi(retrofit: Retrofit): IptvApi = retrofit.create(IptvApi::class.java)
-
+    
+    @Provides @Singleton
+    fun provideSettingsDataStore(@ApplicationContext ctx: Context): SettingsDataStore = SettingsDataStore(ctx)
+    
     @Provides @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): AppDatabase =
         Room.databaseBuilder(ctx, AppDatabase::class.java, "streamsphere.db")

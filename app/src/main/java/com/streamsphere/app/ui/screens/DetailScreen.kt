@@ -206,55 +206,120 @@ private fun DetailContent(
     ) {
         // ── 16:9 player ──────────────────────────────────────────────────────
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f)
-                .background(Color.Black),
-            contentAlignment = Alignment.Center
-        ) {
-            if (exoPlayer != null) {
-                AndroidView(
-                    factory = { ctx ->
-                        PlayerView(ctx).apply {
-                            player        = exoPlayer
-                            useController = false
-                            resizeMode    = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                            layoutParams  = FrameLayout.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
-                if (!isPlaying && playerError == null) {
-                    ThumbnailOverlay(channel, catColor) {
-                        playerError = null
-                        exoPlayer.playWhenReady = true
-                    }
+    modifier = Modifier
+        .fillMaxWidth()
+        .aspectRatio(16f / 9f)
+        .background(Color.Black),
+    contentAlignment = Alignment.Center
+) {
+    // 1. Video surface (bottom layer)
+    if (exoPlayer != null) {
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    player        = exoPlayer
+                    useController = false
+                    resizeMode    = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    layoutParams  = FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
                 }
-                Box(Modifier.fillMaxSize()) {
-                    IconButton(
-                        onClick  = onEnterFullscreen,
-                        modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
-                    ) {
-                        Icon(Icons.Filled.Fullscreen, "Fullscreen", tint = Color.White,
-                            modifier = Modifier.size(28.dp))
-                    }
-                    FilledIconButton(
-                        onClick  = { if (isPlaying) exoPlayer.pause() else exoPlayer.play() },
-                        modifier = Modifier.align(Alignment.Center).size(52.dp),
-                        colors   = IconButtonDefaults.filledIconButtonColors(containerColor = catColor.copy(0.85f))
-                    ) {
-                        Icon(if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            null, modifier = Modifier.size(32.dp))
-                    }
-                }
-                playerError?.let { err ->
-                    ErrorOverlay(err) { playerError = null; exoPlayer.prepare(); exoPlayer.play() }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+
+    // 2. Thumbnail overlay — only when truly not playing AND no error
+    if (exoPlayer != null && !isPlaying && playerError == null) {
+        ThumbnailOverlay(channel, catColor) {
+            playerError = null
+            exoPlayer.playWhenReady = true
+        }
+    }
+
+    // 3. Error overlay — highest priority visual layer
+    if (exoPlayer != null && playerError != null) {
+        ErrorOverlay(playerError!!) {
+            playerError = null
+            exoPlayer.prepare()
+            exoPlayer.play()
+        }
+    }
+
+    // 4. Controls — always rendered on top, shown when playing OR tapped
+    if (exoPlayer != null && playerError == null) {
+        var controlsVisible by remember { mutableStateOf(true) }
+        var lastInteraction by remember { mutableStateOf(0L) }
+
+        // Auto-hide controls after 3 seconds when playing
+        LaunchedEffect(controlsVisible, isPlaying) {
+            if (controlsVisible && isPlaying) {
+                delay(3000)
+                // Only hide if no new interaction since we started waiting
+                val now = System.currentTimeMillis()
+                if (now - lastInteraction >= 2900) {
+                    controlsVisible = false
                 }
             }
         }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures {
+                        lastInteraction = System.currentTimeMillis()
+                        controlsVisible = !controlsVisible
+                    }
+                }
+        ) {
+            // Fullscreen button — top-right
+            AnimatedVisibility(
+                visible = controlsVisible,
+                enter   = fadeIn(),
+                exit    = fadeOut(),
+                modifier = Modifier.align(Alignment.TopEnd)
+            ) {
+                IconButton(
+                    onClick  = onEnterFullscreen,
+                    modifier = Modifier.padding(4.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Fullscreen, "Fullscreen",
+                        tint     = Color.White,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            }
+
+            // Play/pause button — center
+            AnimatedVisibility(
+                visible  = controlsVisible,
+                enter    = fadeIn() + scaleIn(initialScale = 0.8f),
+                exit     = fadeOut() + scaleOut(targetScale = 0.8f),
+                modifier = Modifier.align(Alignment.Center)
+            ) {
+                FilledIconButton(
+                    onClick  = {
+                        lastInteraction = System.currentTimeMillis()
+                        if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+                    },
+                    modifier = Modifier.size(52.dp),
+                    colors   = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = catColor.copy(alpha = 0.85f)
+                    )
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+        }
+    }
+}
 
         // ── Selector bars ────────────────────────────────────────────────────
         if (channel.hasMultipleFeeds) {
