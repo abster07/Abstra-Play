@@ -16,14 +16,6 @@ android {
         versionCode = 1
         versionName = "1.0"
     }
-
-    splits {
-        abi {
-            isEnable = true
-            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-            isUniversalApk = false
-        }
-    }
     
     signingConfigs {
         create("release") {
@@ -50,14 +42,12 @@ android {
         }
     }
 
-    applicationVariants.all { variant ->
-        variant.outputs.all { output ->
-            // cast safely to BaseVariantOutputImpl
-            (output as? com.android.build.gradle.internal.api.BaseVariantOutputImpl)?.apply {
-                // rename the APK
-                outputFileName = "${variant.name}-${variant.versionName}.apk"
-            }
+    applicationVariants.all {
+    outputs.all {
+        (this as? com.android.build.gradle.internal.api.BaseVariantOutputImpl)?.let { output ->
+            output.outputFileName = "${project.findProperty("APP_ID")}.apk"
         }
+    }
 }
 
     compileOptions {
