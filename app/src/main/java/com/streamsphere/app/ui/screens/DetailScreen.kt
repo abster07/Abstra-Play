@@ -1124,8 +1124,22 @@ private fun rememberExoPlayer(
     if (streamUrl == null) return@remember null
     ExoPlayer.Builder(context).build().apply {
         volume = 1f
-        val src = HlsMediaSource.Factory(DefaultHttpDataSource.Factory())
-            .createMediaSource(MediaItem.fromUri(Uri.parse(streamUrl)))
+        val dataSourceFactory =
+            DefaultHttpDataSource.Factory()
+                .setUserAgent("Mozilla/5.0 (Linux; Android) VLC/3.0")
+                .setDefaultRequestProperties(
+    mapOf(
+        "Accept" to "*/*",
+        "Connection" to "keep-alive"
+    )
+)
+                .setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(15000)
+                .setReadTimeoutMs(15000)
+        
+        val src = HlsMediaSource.Factory(dataSourceFactory)
+    .setAllowChunklessPreparation(true)
+    .createMediaSource(MediaItem.fromUri(Uri.parse(streamUrl)))
         setMediaSource(src)
         prepare()
         playWhenReady = autoPlay
@@ -1134,7 +1148,9 @@ private fun rememberExoPlayer(
             .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
             .build()
         addListener(object : Player.Listener {
-            override fun onPlayerError(error: PlaybackException) { onError("Stream unavailable") }
+            override fun onPlayerError(error: PlaybackException) {
+    onError(error.message ?: "Playback error")
+}
         })
     }
 }
