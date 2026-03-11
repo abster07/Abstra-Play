@@ -1,0 +1,9 @@
+{
+  "name": "Live TV Player",
+  "description": "Stream live TV channels, IPTV playlists (M3U/M3U8), and RTSP feeds directly on your Android device or TV. Includes a built-in EPG guide, channel favourites, and picture-in-picture support.",
+  "iconBg": "linear-gradient(135deg,#1a0533,#6d28d9)",
+  "tags": ["tv", "iptv", "streaming", "android", "media"],
+  "platforms": ["android"],
+  "downloadUrl": "https://github.com/abhinav0014/livetv-player/releases/latest",
+  "version": "1.0.0"
+}
