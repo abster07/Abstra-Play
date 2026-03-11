@@ -198,7 +198,7 @@ private fun DetailContent(
             }
         }
         lifecycle.addObserver(obs)
-        onDispose { lifecycle.removeObserver(obs); exoPlayer?.release() }
+        onDispose { lifecycle.removeObserver(obs) }
     }
 
     var showFeedPicker  by remember { mutableStateOf(false) }
@@ -784,7 +784,7 @@ private fun FullscreenPlayer(
             }
         }
         lifecycle.addObserver(obs)
-        onDispose { lifecycle.removeObserver(obs); exoPlayer?.release() }
+        onDispose { lifecycle.removeObserver(obs) }
     }
 
     Box(
@@ -1121,16 +1121,22 @@ private fun rememberExoPlayer(
     streamUrl: String?,
     autoPlay: Boolean,
     onError: (String) -> Unit
-): ExoPlayer? = remember(streamUrl) {
-    if (streamUrl == null) return@remember null
-    
-    val renderersFactory = DefaultRenderersFactory(context).apply {
-        setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
-    }
-    
-    ExoPlayer.Builder(context, renderersFactory).build().apply {
-        volume = 1f
-        val dataSourceFactory = DefaultHttpDataSource.Factory()
+): ExoPlayer? {
+    val playerRef = remember { mutableStateOf<ExoPlayer?>(null) }
+
+    DisposableEffect(streamUrl) {
+        if (streamUrl == null) {
+            playerRef.value = null
+            return@DisposableEffect onDispose {}
+        }
+
+        val renderersFactory = DefaultRenderersFactory(context).apply {
+            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+        }
+
+        val player = ExoPlayer.Builder(context, renderersFactory).build().apply {
+            volume = 1f
+            val dataSourceFactory = DefaultHttpDataSource.Factory()
                 .setUserAgent("Mozilla/5.0 (Linux; Android) VLC/3.0")
                 .setDefaultRequestProperties(
                     mapOf(
@@ -1145,19 +1151,30 @@ private fun rememberExoPlayer(
             val src = HlsMediaSource.Factory(dataSourceFactory)
                 .setAllowChunklessPreparation(true)
                 .createMediaSource(MediaItem.fromUri(Uri.parse(streamUrl)))
-        setMediaSource(src)
-        prepare()
-        playWhenReady = autoPlay
-        // Ensure audio track type is never disabled
-        trackSelectionParameters = trackSelectionParameters.buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
-            .build()
-        addListener(object : Player.Listener {
-            override fun onPlayerError(error: PlaybackException) {
-    onError(error.message ?: "Playback error")
-}
-        })
+
+            setMediaSource(src)
+            prepare()
+            playWhenReady = autoPlay
+            trackSelectionParameters = trackSelectionParameters.buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                .build()
+            addListener(object : Player.Listener {
+                override fun onPlayerError(error: PlaybackException) {
+                    onError(error.message ?: "Playback error")
+                }
+            })
+        }
+
+        playerRef.value = player
+
+        onDispose {
+            player.stop()
+            player.release()
+            playerRef.value = null
+        }
     }
+
+    return playerRef.value
 }
 
 private fun categoryColorFor(channel: ChannelUiModel): Color = when {
