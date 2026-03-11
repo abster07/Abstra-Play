@@ -52,9 +52,10 @@ android {
 
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
-            val outputImpl = output as? com.android.build.gradle.internal.api.BaseVariantOutputImpl
-            outputImpl?.let {
-                it.outputFileName = "${variant.name}-${variant.versionName}.apk"
+            // cast safely to BaseVariantOutputImpl
+            (output as? com.android.build.gradle.internal.api.BaseVariantOutputImpl)?.apply {
+                // rename the APK
+                outputFileName = "${variant.name}-${variant.versionName}.apk"
             }
         }
     }
