@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.streamsphere.app.data.api.AppDatabase
 import com.streamsphere.app.data.api.IptvApi
+import com.streamsphere.app.data.preferences.SettingsDataStore
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
