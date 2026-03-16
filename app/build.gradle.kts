@@ -116,6 +116,11 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:$media3Version")
     implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
     implementation("androidx.media3:media3-ui:$media3Version")
+    
+    implementation("org.jupnp:org.jupnp:2.7.1")
+    implementation("org.jupnp:org.jupnp.support:2.7.1")
+    implementation("org.slf4j:slf4j-android:1.7.36")
+    
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

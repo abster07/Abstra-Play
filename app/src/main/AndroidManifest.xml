@@ -3,7 +3,10 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    
+    
     <application
         android:name=".StreamSphereApp"
         android:allowBackup="true"
@@ -38,6 +41,10 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/channel_widget_info" />
         </receiver>
+        
+        <service
+        android:name="org.jupnp.android.AndroidUpnpServiceImpl"
+        android:exported="false" />
 
     </application>
 
