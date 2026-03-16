@@ -2,33 +2,28 @@ package com.streamsphere.app.data.dlna
 
 import org.jupnp.model.meta.RemoteDevice
 
+enum class DlnaDeviceType { RENDERER, MEDIA_SERVER, OTHER }
+
 data class DlnaDevice(
     val udn: String,
     val friendlyName: String,
-    val type: DlnaDeviceType,
-    val modelName: String?,
     val manufacturer: String?,
-    val remoteDevice: RemoteDevice
+    val modelName: String?,
+    val type: DlnaDeviceType
 )
 
-enum class DlnaDeviceType {
-    RENDERER,   // TV, speakers, etc.
-    MEDIA_SERVER,
-    UNKNOWN
-}
-
 fun RemoteDevice.toDlnaDevice(): DlnaDevice {
-    val deviceType = when (type?.type) {
-        "MediaRenderer" -> DlnaDeviceType.RENDERER
-        "MediaServer" -> DlnaDeviceType.MEDIA_SERVER
-        else -> DlnaDeviceType.UNKNOWN
+    val typeString = type?.type?.toString().orEmpty()
+    val deviceType = when {
+        typeString.contains("MediaRenderer", ignoreCase = true) -> DlnaDeviceType.RENDERER
+        typeString.contains("MediaServer", ignoreCase = true)   -> DlnaDeviceType.MEDIA_SERVER
+        else -> DlnaDeviceType.OTHER
     }
     return DlnaDevice(
-        udn = identity.udn.identifierString,
-        friendlyName = details?.friendlyName ?: "Unknown Device",
-        type = deviceType,
-        modelName = details?.modelDetails?.modelName,
+        udn          = identity.udn.identifierString,
+        friendlyName = details?.friendlyName ?: identity.udn.identifierString,
         manufacturer = details?.manufacturerDetails?.manufacturer,
-        remoteDevice = this
+        modelName    = details?.modelDetails?.modelName,
+        type         = deviceType
     )
 }

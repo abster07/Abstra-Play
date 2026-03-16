@@ -1,18 +1,13 @@
 package com.streamsphere.app.data.dlna
 
-sealed class DlnaBrowseItem {
-    data class Container(
-        val id: String,
-        val title: String,
-        val childCount: Int = 0
-    ) : DlnaBrowseItem()
+enum class DlnaBrowseItemType { CONTAINER, VIDEO, AUDIO, IMAGE, OTHER }
 
-    data class Track(
-        val id: String,
-        val title: String,
-        val uri: String,
-        val mimeType: String,
-        val duration: String? = null,
-        val albumArtUri: String? = null
-    ) : DlnaBrowseItem()
-}
+data class DlnaBrowseItem(
+    val id: String,
+    val parentId: String,
+    val title: String,
+    val type: DlnaBrowseItemType,
+    val url: String? = null,
+    val mimeType: String? = null,
+    val childCount: Int? = null
+)
