@@ -42,6 +42,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
+import androidx.media3.common.TrackGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -50,15 +51,11 @@ import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
-import com.streamsphere.app.data.dlna.DlnaDevice
-import com.streamsphere.app.data.dlna.DlnaDeviceType
 import com.streamsphere.app.data.model.ChannelUiModel
 import com.streamsphere.app.data.model.StreamOption
 import com.streamsphere.app.ui.components.*
 import com.streamsphere.app.ui.theme.*
 import com.streamsphere.app.viewmodel.ChannelViewModel
-import com.streamsphere.app.viewmodel.DlnaCastState
-import com.streamsphere.app.viewmodel.DlnaViewModel
 import kotlinx.coroutines.delay
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -89,32 +86,12 @@ fun DetailScreen(
     autoPlay: Boolean = false,
     startInFullscreen: Boolean = false,
     onBack: () -> Unit,
-    viewModel: ChannelViewModel = hiltViewModel(),
-    dlnaViewModel: DlnaViewModel = hiltViewModel()
+    viewModel: ChannelViewModel = hiltViewModel()
 ) {
     val channels by viewModel.filteredChannels.collectAsState()
     val channel  = remember(channels, channelId) { channels.find { it.id == channelId } }
 
     var isFullscreen by remember { mutableStateOf(startInFullscreen) }
-
-    // ── Bind UPnP service for the lifetime of this screen ────────────────────
-    DisposableEffect(Unit) {
-        dlnaViewModel.bind()
-        onDispose { dlnaViewModel.unbind() }
-    }
-
-    val renderers  by dlnaViewModel.renderers.collectAsState()
-    val castState  by dlnaViewModel.castState.collectAsState()
-    val isBound    by dlnaViewModel.isBound.collectAsState()
-
-    // Snackbar for cast errors
-    val snackbarHostState = remember { SnackbarHostState() }
-    LaunchedEffect(castState.errorMessage) {
-        castState.errorMessage?.let { msg ->
-            snackbarHostState.showSnackbar(msg)
-            dlnaViewModel.clearError()
-        }
-    }
 
     if (isFullscreen) {
         channel?.let { ch ->
@@ -123,13 +100,11 @@ fun DetailScreen(
                 onExitFullscreen = { isFullscreen = false },
                 onFavourite      = { viewModel.toggleFavourite(ch) },
                 onWidget         = { viewModel.toggleWidget(ch) },
-                onSelectStream   = { idx -> viewModel.selectStream(ch.id, idx) },
-                dlnaViewModel    = dlnaViewModel
+                onSelectStream   = { idx -> viewModel.selectStream(ch.id, idx) }
             )
         }
     } else {
         Scaffold(
-            snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
                     title = { Text(channel?.name ?: "Channel") },
@@ -140,14 +115,6 @@ fun DetailScreen(
                     },
                     actions = {
                         channel?.let { ch ->
-                            // ── Cast button ────────────────────────────────
-                            CastIconButton(
-                                castState = castState,
-                                onCastClick = { /* handled inside DetailContent via sheet */ },
-                                // Pass-through; actual click is inside DetailContent
-                                // We expose the state here so the icon stays in sync
-                            )
-                            // ── Favourite button ───────────────────────────
                             IconButton(onClick = { viewModel.toggleFavourite(ch) }) {
                                 Icon(
                                     imageVector        = if (ch.isFavourite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
@@ -173,14 +140,6 @@ fun DetailScreen(
                     onWidget          = { viewModel.toggleWidget(channel) },
                     onEnterFullscreen = { isFullscreen = true },
                     onSelectStream    = { idx -> viewModel.selectStream(channel.id, idx) },
-                    renderers         = renderers,
-                    isBound           = isBound,
-                    castState         = castState,
-                    onCastToDevice    = { device ->
-                        dlnaViewModel.castToRenderer(device, channel.streamUrl ?: "", channel.name)
-                    },
-                    onStopCast        = { dlnaViewModel.stopCast() },
-                    onRefreshDlna     = { dlnaViewModel.refresh() },
                     modifier          = Modifier.padding(padding)
                 )
             }
@@ -200,12 +159,6 @@ private fun DetailContent(
     onWidget: () -> Unit,
     onEnterFullscreen: () -> Unit,
     onSelectStream: (Int) -> Unit,
-    renderers: List<DlnaDevice>,
-    isBound: Boolean,
-    castState: DlnaCastState,
-    onCastToDevice: (DlnaDevice) -> Unit,
-    onStopCast: () -> Unit,
-    onRefreshDlna: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context   = LocalContext.current
@@ -217,14 +170,11 @@ private fun DetailContent(
     var isBuffering  by remember { mutableStateOf(false) }
     var audioTracks  by remember { mutableStateOf<List<AudioTrack>>(emptyList()) }
 
-    var showFeedPicker  by remember { mutableStateOf(false) }
-    var showAudioPicker by remember { mutableStateOf(false) }
-    var showCastPicker  by remember { mutableStateOf(false) }
-
     val exoPlayer = rememberExoPlayer(context, channel.streamUrl, autoPlay) { err ->
         playerError = err; isPlaying = false
     }
 
+    // Listen for track changes to populate audio track list
     LaunchedEffect(exoPlayer) {
         exoPlayer ?: return@LaunchedEffect
         exoPlayer.volume = 1f
@@ -235,6 +185,7 @@ private fun DetailContent(
             }
             override fun onTracksChanged(tracks: Tracks) {
                 audioTracks = extractAudioTracks(tracks)
+                // If somehow no track is selected, force the first one
                 if (audioTracks.isNotEmpty() && audioTracks.none { it.isSelected }) {
                     selectAudioTrack(exoPlayer, audioTracks.first())
                 }
@@ -254,151 +205,127 @@ private fun DetailContent(
         onDispose { lifecycle.removeObserver(obs) }
     }
 
+    var showFeedPicker  by remember { mutableStateOf(false) }
+    var showAudioPicker by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState())
     ) {
         // ── 16:9 player ──────────────────────────────────────────────────────
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f)
-                .background(Color.Black),
-            contentAlignment = Alignment.Center
-        ) {
-            // 1. Video surface (bottom layer)
-            if (exoPlayer != null) {
-                AndroidView(
-                    factory = { ctx ->
-                        PlayerView(ctx).apply {
-                            player        = exoPlayer
-                            useController = false
-                            resizeMode    = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                            layoutParams  = FrameLayout.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-
-            // 2. Thumbnail overlay — only when truly not playing AND no error
-            if (exoPlayer != null && !isPlaying && !isBuffering && playerError == null) {
-                ThumbnailOverlay(channel, catColor) {
-                    playerError = null
-                    exoPlayer.playWhenReady = true
+    modifier = Modifier
+        .fillMaxWidth()
+        .aspectRatio(16f / 9f)
+        .background(Color.Black),
+    contentAlignment = Alignment.Center
+) {
+    // 1. Video surface (bottom layer)
+    if (exoPlayer != null) {
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    player        = exoPlayer
+                    useController = false
+                    resizeMode    = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    layoutParams  = FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
                 }
-            }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+    }
 
-            // 2b. Buffering overlay
-            if (exoPlayer != null && isBuffering && playerError == null) {
-                BufferingOverlay()
-            }
+    // 2. Thumbnail overlay — only when truly not playing AND no error
+    if (exoPlayer != null && !isPlaying && !isBuffering && playerError == null) {
+        ThumbnailOverlay(channel, catColor) {
+            playerError = null
+            exoPlayer.playWhenReady = true
+        }
+    }
 
-            // 3. Error overlay
-            if (exoPlayer != null && playerError != null) {
-                ErrorOverlay(playerError!!) {
-                    playerError = null
-                    exoPlayer.prepare()
-                    exoPlayer.play()
-                }
-            }
+    // 2b. Buffering overlay — shown while stream is loading
+    if (exoPlayer != null && isBuffering && playerError == null) {
+        BufferingOverlay()
+    }
 
-            // 4. Controls — always rendered on top
-            if (exoPlayer != null && playerError == null) {
-                var controlsVisible by remember { mutableStateOf(true) }
-                var lastInteraction by remember { mutableStateOf(0L) }
+    // 3. Error overlay — highest priority visual layer
+    if (exoPlayer != null && playerError != null) {
+        ErrorOverlay(playerError!!) {
+            playerError = null
+            exoPlayer.prepare()
+            exoPlayer.play()
+        }
+    }
 
-                LaunchedEffect(controlsVisible, isPlaying) {
-                    if (controlsVisible && isPlaying) {
-                        delay(3000)
-                        val now = System.currentTimeMillis()
-                        if (now - lastInteraction >= 2900) {
-                            controlsVisible = false
-                        }
-                    }
-                }
+    // 4. Controls — always rendered on top, shown when playing OR tapped
+    if (exoPlayer != null && playerError == null) {
+        var controlsVisible by remember { mutableStateOf(true) }
+        var lastInteraction by remember { mutableStateOf(0L) }
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .pointerInput(Unit) {
-                            detectTapGestures {
-                                lastInteraction = System.currentTimeMillis()
-                                controlsVisible = !controlsVisible
-                            }
-                        }
-                ) {
-                    if (controlsVisible) {
-                        // ── Fullscreen button — top-right ─────────────────
-                        IconButton(
-                            onClick  = onEnterFullscreen,
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(4.dp)
-                        ) {
-                            Icon(
-                                Icons.Filled.Fullscreen, "Fullscreen",
-                                tint     = Color.White,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-
-                        // ── Cast button — top-left ────────────────────────
-                        IconButton(
-                            onClick  = {
-                                lastInteraction = System.currentTimeMillis()
-                                if (castState.isCasting) onStopCast()
-                                else showCastPicker = true
-                            },
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .padding(4.dp)
-                        ) {
-                            Icon(
-                                imageVector        = if (castState.isCasting) Icons.Filled.CastConnected else Icons.Filled.Cast,
-                                contentDescription = if (castState.isCasting) "Stop casting" else "Cast to device",
-                                tint               = if (castState.isCasting) catColor else Color.White,
-                                modifier           = Modifier.size(24.dp)
-                            )
-                        }
-                    }
-
-                    // ── Play/pause button — center ────────────────────────
-                    if (controlsVisible) {
-                        FilledIconButton(
-                            onClick  = {
-                                lastInteraction = System.currentTimeMillis()
-                                if (isPlaying) exoPlayer.pause() else exoPlayer.play()
-                            },
-                            modifier = Modifier
-                                .align(Alignment.Center)
-                                .size(52.dp),
-                            colors   = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = catColor.copy(alpha = 0.85f)
-                            )
-                        ) {
-                            Icon(
-                                imageVector        = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                contentDescription = null,
-                                modifier           = Modifier.size(32.dp)
-                            )
-                        }
-                    }
-
-                    // ── Casting banner — bottom of player ─────────────────
-                    if (castState.isCasting) {
-                        CastingBanner(
-                            deviceName = castState.castingToDevice?.friendlyName ?: "device",
-                            catColor   = catColor,
-                            onStop     = onStopCast,
-                            modifier   = Modifier.align(Alignment.BottomCenter)
-                        )
-                    }
+        // Auto-hide controls after 3 seconds when playing
+        LaunchedEffect(controlsVisible, isPlaying) {
+            if (controlsVisible && isPlaying) {
+                delay(3000)
+                // Only hide if no new interaction since we started waiting
+                val now = System.currentTimeMillis()
+                if (now - lastInteraction >= 2900) {
+                    controlsVisible = false
                 }
             }
         }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures {
+                        lastInteraction = System.currentTimeMillis()
+                        controlsVisible = !controlsVisible
+                    }
+                }
+        ) {
+            // Fullscreen button — top-right, shown when controls visible
+            if (controlsVisible) {
+                IconButton(
+                    onClick  = onEnterFullscreen,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Fullscreen, "Fullscreen",
+                        tint     = Color.White,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            }
+
+            // Play/pause button — center, shown when controls visible
+            if (controlsVisible) {
+                FilledIconButton(
+                    onClick  = {
+                        lastInteraction = System.currentTimeMillis()
+                        if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+                    },
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(52.dp),
+                    colors   = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = catColor.copy(alpha = 0.85f)
+                    )
+                ) {
+                    Icon(
+                        imageVector        = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = null,
+                        modifier           = Modifier.size(32.dp)
+                    )
+                }
+            }
+        }
+    }
+}
 
         // ── Selector bars ────────────────────────────────────────────────────
         if (channel.hasMultipleFeeds) {
@@ -431,34 +358,6 @@ private fun DetailContent(
                     channel.categories.forEach { cat -> CategoryChip(cat, catColor) }
                 }
             }
-
-            // ── Cast to device button ─────────────────────────────────────
-            OutlinedButton(
-                onClick  = {
-                    if (castState.isCasting) onStopCast()
-                    else showCastPicker = true
-                },
-                modifier = Modifier.fillMaxWidth(),
-                border   = BorderStroke(
-                    1.dp,
-                    if (castState.isCasting) catColor else MaterialTheme.colorScheme.outline.copy(0.5f)
-                ),
-                colors   = ButtonDefaults.outlinedButtonColors(
-                    contentColor = if (castState.isCasting) catColor else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            ) {
-                Icon(
-                    imageVector        = if (castState.isCasting) Icons.Filled.CastConnected else Icons.Filled.Cast,
-                    contentDescription = null
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    if (castState.isCasting)
-                        "Stop casting to ${castState.castingToDevice?.friendlyName ?: "device"}"
-                    else "Cast to DLNA device"
-                )
-            }
-
             OutlinedButton(
                 onClick  = onWidget,
                 modifier = Modifier.fillMaxWidth(),
@@ -474,7 +373,6 @@ private fun DetailContent(
         }
     }
 
-    // ── Bottom sheets ─────────────────────────────────────────────────────────
     if (showFeedPicker) {
         FeedPickerSheet(channel = channel, catColor = catColor,
             onSelect  = { idx -> onSelectStream(idx); showFeedPicker = false },
@@ -486,86 +384,12 @@ private fun DetailContent(
             catColor    = catColor,
             onSelect    = { track ->
                 selectAudioTrack(exoPlayer, track)
+                // Refresh list to show new selection
                 audioTracks = audioTracks.map { it.copy(isSelected = it.groupIndex == track.groupIndex && it.trackIndex == track.trackIndex) }
                 showAudioPicker = false
             },
             onDismiss   = { showAudioPicker = false }
         )
-    }
-    if (showCastPicker) {
-        DlnaDevicePickerSheet(
-            renderers        = renderers,
-            isBound          = isBound,
-            onDeviceSelected = { device -> showCastPicker = false; onCastToDevice(device) },
-            onRefresh        = onRefreshDlna,
-            onDismiss        = { showCastPicker = false }
-        )
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Cast icon button (used in TopAppBar)
-// ─────────────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun CastIconButton(
-    castState: DlnaCastState,
-    onCastClick: () -> Unit
-) {
-    // Intentionally no-op — the cast button in the TopAppBar is a status indicator;
-    // the actual action is handled via the player overlay and the Cast button in DetailContent.
-    // We render it here so the icon updates in the app bar when casting is active.
-    IconButton(onClick = onCastClick) {
-        Icon(
-            imageVector        = if (castState.isCasting) Icons.Filled.CastConnected else Icons.Filled.Cast,
-            contentDescription = if (castState.isCasting) "Casting active" else "Cast",
-            tint               = if (castState.isCasting) MaterialTheme.colorScheme.primary
-                                 else MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Casting banner (shown at bottom of player while cast is active)
-// ─────────────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun CastingBanner(
-    deviceName: String,
-    catColor: Color,
-    onStop: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color    = Color.Black.copy(alpha = 0.70f)
-    ) {
-        Row(
-            modifier              = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment     = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                Icons.Filled.CastConnected,
-                contentDescription = null,
-                tint               = catColor,
-                modifier           = Modifier.size(16.dp)
-            )
-            Text(
-                text     = "Casting to $deviceName",
-                style    = MaterialTheme.typography.labelMedium,
-                color    = Color.White,
-                modifier = Modifier.weight(1f)
-            )
-            TextButton(
-                onClick         = onStop,
-                contentPadding  = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-            ) {
-                Text("Stop", style = MaterialTheme.typography.labelMedium, color = catColor)
-            }
-        }
     }
 }
 
@@ -686,6 +510,7 @@ private fun AudioTrackRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Selection indicator
             Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
                 if (track.isSelected) {
                     Icon(Icons.Filled.CheckCircle, null, tint = catColor, modifier = Modifier.size(22.dp))
@@ -713,6 +538,7 @@ private fun AudioTrackRow(
                 }
             }
 
+            // Language code badge
             track.language?.let { lang ->
                 Surface(
                     shape = RoundedCornerShape(4.dp),
@@ -731,7 +557,7 @@ private fun AudioTrackRow(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Feed selector bar
+// Feed selector bar (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -772,7 +598,7 @@ private fun FeedSelectorBar(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Feed picker sheet
+// Feed picker sheet (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -862,8 +688,7 @@ private fun FullscreenPlayer(
     onExitFullscreen: () -> Unit,
     onFavourite: () -> Unit,
     onWidget: () -> Unit,
-    onSelectStream: (Int) -> Unit,
-    dlnaViewModel: DlnaViewModel
+    onSelectStream: (Int) -> Unit
 ) {
     val context   = LocalContext.current
     val activity  = context as Activity
@@ -881,12 +706,7 @@ private fun FullscreenPlayer(
     var isRotLocked     by remember { mutableStateOf(false) }
     var showFeedPicker  by remember { mutableStateOf(false) }
     var showAudioPicker by remember { mutableStateOf(false) }
-    var showCastPicker  by remember { mutableStateOf(false) }
     var audioTracks     by remember { mutableStateOf<List<AudioTrack>>(emptyList()) }
-
-    val renderers  by dlnaViewModel.renderers.collectAsState()
-    val castState  by dlnaViewModel.castState.collectAsState()
-    val isBound    by dlnaViewModel.isBound.collectAsState()
 
     var volumeLevel by remember {
         mutableStateOf(audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / maxVol)
@@ -985,28 +805,29 @@ private fun FullscreenPlayer(
             .fillMaxSize()
             .background(Color.Black)
             .pointerInput(isLocked) {
-                if (!isLocked) {
-                    detectVerticalDragGestures { change, dragAmount ->
-                        val delta  = -dragAmount / size.height.toFloat()
-                        val isLeft = change.position.x < size.width / 2f
-                        if (isLeft) {
-                            val b = (brightnessLevel + delta).coerceIn(0.01f, 1f)
-                            brightnessLevel = b
-                            applyBrightness(b)
-                        } else {
-                            val v = (volumeLevel + delta).coerceAtLeast(0.05f).coerceAtMost(1f)
-                            volumeLevel = v
-                            applyVolume(v)
-                        }
-                        showControls = true
-                    }
-                }
+            if (!isLocked) {
+            detectVerticalDragGestures { change, dragAmount ->
+            val delta  = -dragAmount / size.height.toFloat()
+            val isLeft = change.position.x < size.width / 2f
+            if (isLeft) {
+                val b = (brightnessLevel + delta).coerceIn(0.01f, 1f)
+                brightnessLevel = b
+                applyBrightness(b)
+            } else {
+                val v = (volumeLevel + delta).coerceAtLeast(0.05f).coerceAtMost(1f)
+                volumeLevel = v
+                applyVolume(v)
             }
+
+            showControls = true
+        }
+    }
+}
             .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { showControls = !showControls }
-                )
-            }
+              detectTapGestures(
+                onTap = { showControls = !showControls }
+              )
+}
     ) {
         if (exoPlayer != null) {
             AndroidView(
@@ -1023,6 +844,7 @@ private fun FullscreenPlayer(
 
         EdgeLevelBars(brightnessLevel = brightnessLevel, volumeLevel = volumeLevel)
 
+        // Buffering indicator — shown while stream is loading
         if (isBuffering && playerError == null) {
             BufferingOverlay()
         }
@@ -1041,44 +863,29 @@ private fun FullscreenPlayer(
         } else {
             AnimatedVisibility(visible = showControls, enter = fadeIn(), exit = fadeOut()) {
                 FullscreenControls(
-                    channel           = channel,
-                    isPlaying         = isPlaying,
-                    catColor          = catColor,
-                    isRotLocked       = isRotLocked,
-                    audioTracks       = audioTracks,
-                    castState         = castState,
-                    onPlayPause       = { if (isPlaying) exoPlayer?.pause() else exoPlayer?.play() },
-                    onReplay          = { exoPlayer?.seekBack() },
-                    onForward         = { exoPlayer?.seekForward() },
-                    onExitFullscreen  = onExitFullscreen,
-                    onLock            = { isLocked = true; showControls = false },
-                    onToggleRot       = {
+                    channel          = channel,
+                    isPlaying        = isPlaying,
+                    catColor         = catColor,
+                    isRotLocked      = isRotLocked,
+                    audioTracks      = audioTracks,
+                    onPlayPause      = { if (isPlaying) exoPlayer?.pause() else exoPlayer?.play() },
+                    onReplay         = { exoPlayer?.seekBack() },
+                    onForward        = { exoPlayer?.seekForward() },
+                    onExitFullscreen = onExitFullscreen,
+                    onLock           = { isLocked = true; showControls = false },
+                    onToggleRot      = {
                         isRotLocked = !isRotLocked
                         activity.requestedOrientation = if (isRotLocked)
                             ActivityInfo.SCREEN_ORIENTATION_LOCKED
                         else ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                     },
                     onOpenFeedPicker  = if (channel.hasMultipleFeeds) {{ showFeedPicker = true }} else null,
-                    onOpenAudioPicker = if (audioTracks.size > 1) {{ showAudioPicker = true }} else null,
-                    onOpenCastPicker  = {
-                        if (castState.isCasting) dlnaViewModel.stopCast()
-                        else showCastPicker = true
-                    }
+                    onOpenAudioPicker = if (audioTracks.size > 1) {{ showAudioPicker = true }} else null
                 )
             }
             playerError?.let { err ->
                 ErrorOverlay(err) { playerError = null; exoPlayer?.prepare(); exoPlayer?.play() }
             }
-        }
-
-        // Casting banner — always visible in fullscreen when cast is active
-        if (castState.isCasting) {
-            CastingBanner(
-                deviceName = castState.castingToDevice?.friendlyName ?: "device",
-                catColor   = catColor,
-                onStop     = { dlnaViewModel.stopCast() },
-                modifier   = Modifier.align(Alignment.BottomCenter)
-            )
         }
     }
 
@@ -1101,22 +908,10 @@ private fun FullscreenPlayer(
             onDismiss   = { showAudioPicker = false }
         )
     }
-    if (showCastPicker) {
-        DlnaDevicePickerSheet(
-            renderers        = renderers,
-            isBound          = isBound,
-            onDeviceSelected = { device ->
-                showCastPicker = false
-                dlnaViewModel.castToRenderer(device, channel.streamUrl ?: "", channel.name)
-            },
-            onRefresh        = { dlnaViewModel.refresh() },
-            onDismiss        = { showCastPicker = false }
-        )
-    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Fullscreen controls — with cast button added
+// Fullscreen controls — now with audio track button
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -1126,7 +921,6 @@ private fun FullscreenControls(
     catColor: Color,
     isRotLocked: Boolean,
     audioTracks: List<AudioTrack>,
-    castState: DlnaCastState,
     onPlayPause: () -> Unit,
     onReplay: () -> Unit,
     onForward: () -> Unit,
@@ -1134,18 +928,14 @@ private fun FullscreenControls(
     onLock: () -> Unit,
     onToggleRot: () -> Unit,
     onOpenFeedPicker: (() -> Unit)?,
-    onOpenAudioPicker: (() -> Unit)?,
-    onOpenCastPicker: () -> Unit
+    onOpenAudioPicker: (() -> Unit)?
 ) {
     val selectedAudio = audioTracks.firstOrNull { it.isSelected }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.40f))) {
-        // ── Top bar ───────────────────────────────────────────────────────────
+        // Top bar
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-                .align(Alignment.TopCenter),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp).align(Alignment.TopCenter),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onExitFullscreen) {
@@ -1167,7 +957,7 @@ private fun FullscreenControls(
             LiveBadge()
             Spacer(Modifier.width(4.dp))
 
-            // Audio track picker button
+            // Audio track picker button — shows current language code
             if (onOpenAudioPicker != null) {
                 IconButton(onClick = onOpenAudioPicker) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1186,14 +976,6 @@ private fun FullscreenControls(
                     Icon(Icons.Filled.Subtitles, "Change Feed", tint = catColor)
                 }
             }
-            // ── Cast button ───────────────────────────────────────────────
-            IconButton(onClick = onOpenCastPicker) {
-                Icon(
-                    imageVector        = if (castState.isCasting) Icons.Filled.CastConnected else Icons.Filled.Cast,
-                    contentDescription = if (castState.isCasting) "Stop casting" else "Cast",
-                    tint               = if (castState.isCasting) catColor else Color.White
-                )
-            }
             // Rotation lock
             IconButton(onClick = onToggleRot) {
                 Icon(
@@ -1208,7 +990,7 @@ private fun FullscreenControls(
             }
         }
 
-        // ── Center controls ───────────────────────────────────────────────────
+        // Center controls
         Row(
             modifier = Modifier.align(Alignment.Center),
             horizontalArrangement = Arrangement.spacedBy(28.dp),
@@ -1316,6 +1098,7 @@ private fun BufferingOverlay() {
 // ExoPlayer helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Extract all audio track groups from the current Tracks object. */
 @androidx.annotation.OptIn(UnstableApi::class)
 fun extractAudioTracks(tracks: Tracks): List<AudioTrack> {
     val result = mutableListOf<AudioTrack>()
@@ -1325,6 +1108,7 @@ fun extractAudioTracks(tracks: Tracks): List<AudioTrack> {
             val format = group.getTrackFormat(trackIndex)
             val isSelected = group.isTrackSelected(trackIndex)
             val lang = format.language?.takeIf { it.isNotBlank() && it != "und" }
+            // Build a human-readable label
             val label = when {
                 lang != null -> {
                     try {
@@ -1352,17 +1136,21 @@ fun extractAudioTracks(tracks: Tracks): List<AudioTrack> {
     return result
 }
 
+/** Force ExoPlayer to play a specific audio track and disable automatic selection for audio. */
 @androidx.annotation.OptIn(UnstableApi::class)
 fun selectAudioTrack(player: ExoPlayer, track: AudioTrack) {
     val currentTracks = player.currentTracks
     val group = currentTracks.groups.getOrNull(track.groupIndex) ?: return
     player.trackSelectionParameters = player.trackSelectionParameters
         .buildUpon()
+        // Override: select exactly this group+track, disable auto for audio
         .setOverrideForType(
             androidx.media3.common.TrackSelectionOverride(group.mediaTrackGroup, track.trackIndex)
         )
+        // Ensure audio is never disabled
         .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
         .build()
+    // Make sure player volume is audible
     player.volume = 1f
 }
 
