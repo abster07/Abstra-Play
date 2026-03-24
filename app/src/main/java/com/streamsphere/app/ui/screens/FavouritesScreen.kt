@@ -28,44 +28,36 @@ fun FavouritesScreen(
     val widgetChannels by viewModel.widgetChannels.collectAsState()
 
     val favModels = remember(favourites, allChannels) {
-        favourites.mapNotNull { fav ->
-            // Prefer the enriched model from the live channel list (has full streamOptions).
-            // Fall back to a minimal model built from the Room record if the channel
-            // isn't in the current filtered list (e.g. after clearing search).
-            allChannels.find { it.id == fav.id } ?: run {
-                // Build a single StreamOption from the stored streamUrl so the
-                // card/detail still works without crashing.
-                val options = if (fav.streamUrl != null) {
-                    listOf(
-                        StreamOption(
-                            feedId        = null,
-                            feedName      = fav.name,
-                            languages     = emptyList(),
-                            languageNames = emptyList(),
-                            quality       = null,
-                            url           = fav.streamUrl,
-                            referrer      = null,
-                            userAgent     = null,
-                            isMain        = true
-                        )
-                    )
-                } else emptyList()
-
-                ChannelUiModel(
-                    id                  = fav.id,
-                    name                = fav.name,
-                    country             = fav.country,
-                    countryFlag         = "🌐",
-                    categories          = fav.categories.split(",").filter { it.isNotBlank() },
-                    logoUrl             = fav.logoUrl,
-                    streamOptions       = options,
-                    selectedStreamIndex = 0,
-                    isFavourite         = true,
-                    isWidget            = fav.isWidget
+    favourites.mapNotNull { fav ->
+        allChannels.find { it.id == fav.id } ?: run {
+            // Ensure we NEVER provide an empty list if a URL exists
+            val url = fav.streamUrl ?: "" 
+            val options = listOf(
+                StreamOption(
+                    feedId = "stored",
+                    feedName = fav.name,
+                    url = url,
+                    isMain = true,
+                    languages = emptyList(),
+                    languageNames = emptyList()
                 )
-            }
+            )
+
+            ChannelUiModel(
+                id = fav.id,
+                name = fav.name,
+                country = fav.country,
+                countryFlag = "🏳️",
+                categories = fav.categories.split(",").filter { it.isNotBlank() },
+                logoUrl = fav.logoUrl,
+                streamOptions = options, // Always has at least 1 item
+                selectedStreamIndex = 0,
+                isFavourite = true,
+                isWidget = fav.isWidget
+            )
         }
     }
+}
 
     Scaffold(
         topBar = {
