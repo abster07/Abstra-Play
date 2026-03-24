@@ -124,5 +124,5 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     // Lottie Animation
-    implementation("com.com.airbnb.android:lottie-compose:6.4.0")
+    implementation("com.airbnb.android:lottie-compose:6.4.0")
 }
