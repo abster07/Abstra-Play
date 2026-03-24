@@ -120,11 +120,6 @@ dependencies {
     implementation("org.slf4j:slf4j-android:1.7.36")
 
     // ── Google Cast SDK ────────────────────────────────────────────────────
-    // Excludes the internal ExoPlayer bundled with Cast to avoid duplicate
-    // class conflicts with the media3 ExoPlayer we already include.
-    implementation("com.google.android.gms:play-services-cast-framework:21.4.0") {
-        exclude(group = "com.google.android.exoplayer")
-    }
-
+    implementation("com.google.android.gms:play-services-cast-framework:21.4.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
