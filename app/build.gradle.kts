@@ -13,10 +13,10 @@ android {
         applicationId = "com.streamsphere.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.1.24-03"
     }
-    
+
     signingConfigs {
         create("release") {
             storeFile = file("keystore.jks")
@@ -25,7 +25,7 @@ android {
             keyPassword = System.getenv("KEY_PASSWORD")
         }
     }
-    
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -36,16 +36,14 @@ android {
             )
             signingConfig = signingConfigs.getByName("release")
         }
-        
         debug {
-          signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-        
         isCoreLibraryDesugaringEnabled = true
     }
 
@@ -106,20 +104,27 @@ dependencies {
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-    
+
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
-    
+
     // Media3 / ExoPlayer
     val media3Version = "1.3.1"
     implementation(files("libs/ffmpeg-decoder.aar"))
-
     implementation("androidx.media3:media3-exoplayer:$media3Version")
     implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
     implementation("androidx.media3:media3-ui:$media3Version")
-    
+
+    // DLNA / UPnP
     implementation("org.jupnp:org.jupnp:2.7.1")
+    implementation("org.jupnp:org.jupnp.android:2.7.1")   // Android-specific binding
     implementation("org.slf4j:slf4j-android:1.7.36")
-    
-    
+
+    // ── Google Cast SDK ────────────────────────────────────────────────────
+    // Excludes the internal ExoPlayer bundled with Cast to avoid duplicate
+    // class conflicts with the media3 ExoPlayer we already include.
+    implementation("com.google.android.gms:play-services-cast-framework:21.4.0") {
+        exclude(group = "com.google.android.exoplayer")
+    }
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

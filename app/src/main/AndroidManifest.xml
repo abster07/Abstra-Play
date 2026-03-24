@@ -5,8 +5,11 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
-    
-    
+
+    <!-- Required for Google Cast device discovery on Android 12+ -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"
+        android:minSdkVersion="31" />
+
     <application
         android:name=".StreamSphereApp"
         android:allowBackup="true"
@@ -30,6 +33,16 @@
             </intent-filter>
         </activity>
 
+        <!-- ── Google Cast SDK ────────────────────────────────────────────── -->
+        <!--
+            Points the Cast framework at your CastOptionsProvider.
+            Replace the class path if you move the file to a different package.
+        -->
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="com.streamsphere.app.cast.CastOptionsProvider" />
+
+        <!-- ── Home-screen widget ─────────────────────────────────────────── -->
         <receiver
             android:name=".widget.ChannelWidgetReceiver"
             android:exported="true"
@@ -41,10 +54,11 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/channel_widget_info" />
         </receiver>
-        
+
+        <!-- ── jUPnP / DLNA background service ───────────────────────────── -->
         <service
-        android:name="org.jupnp.android.AndroidUpnpServiceImpl"
-        android:exported="false" />
+            android:name="org.jupnp.android.AndroidUpnpServiceImpl"
+            android:exported="false" />
 
     </application>
 

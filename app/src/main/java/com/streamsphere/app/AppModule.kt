@@ -25,7 +25,9 @@ object AppModule {
     @Provides @Singleton
     fun provideOkHttp(): OkHttpClient =
         OkHttpClient.Builder()
-            .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
+            .addInterceptor(HttpLoggingInterceptor().apply {
+                level = HttpLoggingInterceptor.Level.BASIC
+            })
             .build()
 
     @Provides @Singleton
@@ -37,13 +39,17 @@ object AppModule {
 
     @Provides @Singleton
     fun provideApi(retrofit: Retrofit): IptvApi = retrofit.create(IptvApi::class.java)
-    
+
     @Provides @Singleton
-    fun provideSettingsDataStore(@ApplicationContext ctx: Context): SettingsDataStore = SettingsDataStore(ctx)
-    
+    fun provideSettingsDataStore(@ApplicationContext ctx: Context): SettingsDataStore =
+        SettingsDataStore(ctx)
+
     @Provides @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): AppDatabase =
         Room.databaseBuilder(ctx, AppDatabase::class.java, "streamsphere.db")
             .fallbackToDestructiveMigration()
             .build()
+
+    // CastRepository and DlnaRepository both have @Inject constructors with
+    // @ApplicationContext — Hilt resolves them automatically, no @Provides needed.
 }

@@ -1,10 +1,11 @@
 package com.streamsphere.app
 
 import android.os.Bundle
+import android.view.Menu
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.viewModels                          // ← ADD
+import androidx.activity.viewModels
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,14 +15,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.mediarouter.app.MediaRouteButton
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
+import com.google.android.gms.cast.framework.CastButtonFactory
+import com.google.android.gms.cast.framework.CastContext
+import com.streamsphere.app.data.cast.CastRepository
 import com.streamsphere.app.ui.navigation.*
 import com.streamsphere.app.ui.screens.*
 import com.streamsphere.app.ui.theme.StreamSphereTheme
-import com.streamsphere.app.viewmodel.SettingsViewModel     // ← ADD
+import com.streamsphere.app.viewmodel.SettingsViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -29,21 +35,33 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_CHANNEL_ID  = "extra_channel_id"
         const val EXTRA_STREAM_URL  = "extra_stream_url"
-        const val EXTRA_FULLSCREEN  = "extra_fullscreen"  // from widget tap
+        const val EXTRA_FULLSCREEN  = "extra_fullscreen"
     }
-    
+
     private val settingsViewModel: SettingsViewModel by viewModels()
-    
+
+    @Inject lateinit var castRepository: CastRepository
+
+    // CastContext is initialised lazily; it may return null if Play Services are absent.
+    private var castContext: CastContext? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // Initialise Cast framework early so the MediaRouter button works.
+        castContext = try {
+            CastContext.getSharedInstance(this)
+        } catch (e: Exception) {
+            null   // Cast not available on this device (e.g. emulator without Play Services)
+        }
+
         val startChannelId  = intent?.getStringExtra(EXTRA_CHANNEL_ID)
         val startFullscreen = intent?.getBooleanExtra(EXTRA_FULLSCREEN, false) ?: false
-        
+
         setContent {
-            val darkMode by settingsViewModel.darkMode.collectAsState()  // ← MOVE inside setContent
+            val darkMode by settingsViewModel.darkMode.collectAsState()
 
             StreamSphereTheme(darkTheme = darkMode) {
                 StreamSphereUI(
@@ -52,6 +70,30 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        castRepository.registerSessionListener()
+    }
+
+    override fun onPause() {
+        castRepository.unregisterSessionListener()
+        super.onPause()
+    }
+
+    /**
+     * Inflate the Cast MediaRoute button into the options menu so Android's
+     * system-level Cast discovery works automatically.  This is optional if
+     * you are handling the Cast button entirely in Compose, but is recommended
+     * as it ensures the button shows up in the Action Bar on devices / launchers
+     * that surface the menu.
+     */
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        super.onCreateOptionsMenu(menu)
+        menuInflater.inflate(R.menu.browse, menu)
+        CastButtonFactory.setUpMediaRouteButton(applicationContext, menu, R.id.media_route_menu_item)
+        return true
     }
 }
 
@@ -101,10 +143,10 @@ fun StreamSphereUI(
             ) { backStack ->
                 val channelId = backStack.arguments?.getString("channelId") ?: return@composable
                 DetailScreen(
-                    channelId        = channelId,
-                    autoPlay         = channelId == startChannelId,
+                    channelId         = channelId,
+                    autoPlay          = channelId == startChannelId,
                     startInFullscreen = startFullscreen && channelId == startChannelId,
-                    onBack           = navController::popBackStack
+                    onBack            = navController::popBackStack
                 )
             }
         }
