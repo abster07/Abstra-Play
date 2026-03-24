@@ -8,6 +8,5 @@
     <style name="Theme.StreamSphere.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">#ffffff</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
-        <item name="postSplashScreenTheme">@style/Theme.StreamSphere</item>
     </style>
 </resources>
