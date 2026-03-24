@@ -1167,37 +1167,39 @@ fun selectAudioTrack(player: ExoPlayer, track: AudioTrack) {
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
-private fun rememberExoPlayer(context: Context, streamUrl: String?, autoPlay: Boolean, onError: (String) -> Unit): ExoPlayer? {
-    val playerRef = remember { mutableStateOf<ExoPlayer?>(null) }
-    DisposableEffect(streamUrl) {
-        if (streamUrl == null) { playerRef.value = null; return@DisposableEffect onDispose {} }
-        val renderersFactory = DefaultRenderersFactory(context).apply {
-            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
-        }
-        val player = ExoPlayer.Builder(context, renderersFactory).build().apply {
-            volume = 1f
-            val dataSourceFactory = DefaultHttpDataSource.Factory()
-                .setUserAgent("Mozilla/5.0 (Linux; Android) VLC/3.0")
-                .setDefaultRequestProperties(mapOf("Accept" to "*/*", "Connection" to "keep-alive"))
-                .setAllowCrossProtocolRedirects(true)
-                .setConnectTimeoutMs(15_000)
-                .setReadTimeoutMs(15_000)
-            val src = HlsMediaSource.Factory(dataSourceFactory)
-                .setAllowChunklessPreparation(true)
-                .createMediaSource(MediaItem.fromUri(Uri.parse(streamUrl)))
-            setMediaSource(src)
-            prepare()
-            playWhenReady = autoPlay
-            trackSelectionParameters = trackSelectionParameters.buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false).build()
-            addListener(object : Player.Listener {
-                override fun onPlayerError(error: PlaybackException) { onError(friendlyPlaybackError(error)) }
-            })
-        }
-        playerRef.value = player
-        onDispose { player.stop(); player.release(); playerRef.value = null }
+fun rememberExoPlayer(
+    context: Context,
+    streamUrl: String?,
+    autoPlay: Boolean,
+    onError: (String) -> Unit
+): ExoPlayer? {
+    if (streamUrl.isNullOrBlank()) return null
+
+    val exoPlayer = remember(streamUrl) {
+        ExoPlayer.Builder(context)
+            .setRenderersFactory(DefaultRenderersFactory(context).setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON))
+            .build().apply {
+                val dataSourceFactory = DefaultHttpDataSource.Factory()
+                    .setUserAgent("StreamSphere/1.0")
+                    .setAllowCrossProtocolRedirects(true)
+                
+                val mediaSource = HlsMediaSource.Factory(dataSourceFactory)
+                    .createMediaSource(MediaItem.fromUri(Uri.parse(streamUrl)))
+                
+                setMediaSource(mediaSource)
+                prepare()
+                playWhenReady = autoPlay
+            }
     }
-    return playerRef.value
+
+    // CRITICAL: Release player when the Composable is destroyed
+    DisposableEffect(exoPlayer) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
+    return exoPlayer
 }
 
 private fun friendlyPlaybackError(error: PlaybackException): String = when (error.errorCode) {
