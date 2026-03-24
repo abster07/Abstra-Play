@@ -122,4 +122,7 @@ dependencies {
     // ── Google Cast SDK ────────────────────────────────────────────────────
     implementation("com.google.android.gms:play-services-cast-framework:21.4.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // Lottie Animation
+    implementation("com.com.airbnb.android:lottie-compose:6.4.0")
 }

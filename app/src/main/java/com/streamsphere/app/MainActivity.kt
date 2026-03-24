@@ -34,40 +34,49 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_CHANNEL_ID  = "extra_channel_id"
-        const val EXTRA_STREAM_URL  = "extra_stream_url"
         const val EXTRA_FULLSCREEN  = "extra_fullscreen"
     }
 
     private val settingsViewModel: SettingsViewModel by viewModels()
-
     @Inject lateinit var castRepository: CastRepository
-
-    // CastContext is initialised lazily; it may return null if Play Services are absent.
     private var castContext: CastContext? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
+        // 1. Install System Splash (Standard Icon)
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Initialise Cast framework early so the MediaRouter button works.
+        // 2. Initialise Cast
         castContext = try {
             CastContext.getSharedInstance(this)
         } catch (e: Exception) {
-            null   // Cast not available on this device (e.g. emulator without Play Services)
+            null
         }
 
         val startChannelId  = intent?.getStringExtra(EXTRA_CHANNEL_ID)
         val startFullscreen = intent?.getBooleanExtra(EXTRA_FULLSCREEN, false) ?: false
 
+        // 3. SINGLE setContent call
         setContent {
             val darkMode by settingsViewModel.darkMode.collectAsState()
+            
+            // Logic to handle the transition from Lottie to Main UI
+            var showLottieSplash by remember { mutableStateOf(true) }
 
             StreamSphereTheme(darkTheme = darkMode) {
-                StreamSphereUI(
-                    startChannelId  = startChannelId,
-                    startFullscreen = startFullscreen
-                )
+                if (showLottieSplash) {
+                    // Your custom Lottie animation screen
+                    LottieSplashScreen(onFinished = {
+                        showLottieSplash = false
+                    })
+                } else {
+                    // Your actual App content
+                    StreamSphereUI(
+                        startChannelId = startChannelId,
+                        startFullscreen = startFullscreen
+                    )
+                }
             }
         }
     }
@@ -82,13 +91,6 @@ class MainActivity : ComponentActivity() {
         super.onPause()
     }
 
-    /**
-     * Inflate the Cast MediaRoute button into the options menu so Android's
-     * system-level Cast discovery works automatically.  This is optional if
-     * you are handling the Cast button entirely in Compose, but is recommended
-     * as it ensures the button shows up in the Action Bar on devices / launchers
-     * that surface the menu.
-     */
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         super.onCreateOptionsMenu(menu)
         menuInflater.inflate(R.menu.browse, menu)
