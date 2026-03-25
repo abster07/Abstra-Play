@@ -34,10 +34,5 @@
 -keep class javax.inject.** { *; }
 -dontwarn dagger.hilt.**
 
-
-# Specifically protect the service that is throwing the NPE
--keep class androidx.room.MultiInstanceInvalidationService { *; }
--keep class androidx.room.IMultiInstanceInvalidationService { *; }
-
 # Also keep your specific ViewModel so Hilt can inject it properly in Release
 -keep class com.streamsphere.app.viewmodel.** { *; }
