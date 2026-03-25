@@ -97,6 +97,7 @@ class DlnaRepository @Inject constructor(
 
     fun bind() {
         if (_isBound.value) return
+        delay(500)
         context.bindService(
             Intent(context, AndroidUpnpServiceImpl::class.java),
             serviceConnection,

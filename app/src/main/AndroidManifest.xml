@@ -58,6 +58,7 @@
         <!-- ── jUPnP / DLNA background service ───────────────────────────── -->
         <service
             android:name="org.jupnp.android.AndroidUpnpServiceImpl"
+            android:enabled="false"
             android:exported="false" />
 
     </application>

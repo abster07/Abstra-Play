@@ -6,7 +6,8 @@
         <item name="android:navigationBarColor">@color/surface</item>
     </style>
     <style name="Theme.StreamSphere.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">#ffffff</item>
+        <item name="android:windowBackground">#ffffff</item>
+        <item name="windowSplashScreenBackground">@color/surface</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
         <item name="postSplashScreenTheme">@style/Theme.StreamSphere</item>
     </style>
