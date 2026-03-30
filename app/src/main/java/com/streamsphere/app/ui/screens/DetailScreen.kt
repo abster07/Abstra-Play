@@ -484,3 +484,700 @@ private fun AudioPickerSheet(
         }
     }
 }
+
+@Composable
+private fun AudioTrackRow(
+    track: AudioTrack,
+    catColor: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick  = onClick,
+        color    = if (track.isSelected) catColor.copy(0.08f) else Color.Transparent,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Selection indicator
+            Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                if (track.isSelected) {
+                    Icon(Icons.Filled.CheckCircle, null, tint = catColor, modifier = Modifier.size(22.dp))
+                } else {
+                    Icon(Icons.Outlined.RadioButtonUnchecked, null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                }
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text  = track.label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (track.isSelected) catColor else MaterialTheme.colorScheme.onSurface
+                )
+                val detail = buildList {
+                    if (track.channelCount >= 6) add("5.1 Surround")
+                    else if (track.channelCount == 2) add("Stereo")
+                    else if (track.channelCount == 1) add("Mono")
+                    if (track.sampleRate > 0) add("${track.sampleRate / 1000} kHz")
+                }.joinToString(" · ")
+                if (detail.isNotBlank()) {
+                    Text(detail, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            // Language code badge
+            track.language?.let { lang ->
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Text(
+                        text     = lang.uppercase(),
+                        style    = MaterialTheme.typography.labelSmall,
+                        color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Feed selector bar (unchanged)
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun FeedSelectorBar(
+    channel: ChannelUiModel,
+    onOpenPicker: () -> Unit,
+    catColor: Color
+) {
+    val current = channel.currentStream
+    Surface(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(Icons.Filled.Subtitles, null, tint = catColor, modifier = Modifier.size(18.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(current?.feedName ?: "Default", style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface)
+                if (!current?.languageNames.isNullOrEmpty()) {
+                    Text(current!!.languageNames.joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            current?.quality?.let {
+                Surface(shape = RoundedCornerShape(4.dp), color = catColor.copy(0.15f)) {
+                    Text(it, style = MaterialTheme.typography.labelSmall, color = catColor,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                }
+            }
+            TextButton(onClick = onOpenPicker, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text("Change", style = MaterialTheme.typography.labelMedium, color = catColor)
+                Icon(Icons.Filled.ExpandMore, null, modifier = Modifier.size(16.dp), tint = catColor)
+            }
+        }
+    }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Feed picker sheet (unchanged)
+// ─────────────────────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FeedPickerSheet(
+    channel: ChannelUiModel,
+    catColor: Color,
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor   = MaterialTheme.colorScheme.surface,
+        shape            = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+    ) {
+        Column(modifier = Modifier.padding(bottom = 32.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.Language, null, tint = catColor, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Choose Feed / Quality", style = MaterialTheme.typography.titleMedium)
+            }
+            Text("${channel.streamOptions.size} feeds available",
+                style    = MaterialTheme.typography.bodySmall,
+                color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp))
+            Spacer(Modifier.height(8.dp))
+            HorizontalDivider()
+            channel.streamOptions.forEachIndexed { idx, option ->
+                val isSelected = idx == channel.selectedStreamIndex
+                Surface(
+                    onClick  = { onSelect(idx) },
+                    color    = if (isSelected) catColor.copy(0.08f) else Color.Transparent,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                            if (isSelected) Icon(Icons.Filled.CheckCircle, null, tint = catColor, modifier = Modifier.size(22.dp))
+                            else Icon(Icons.Outlined.RadioButtonUnchecked, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(option.feedName, style = MaterialTheme.typography.bodyLarge,
+                                    color = if (isSelected) catColor else MaterialTheme.colorScheme.onSurface)
+                                if (option.isMain) {
+                                    Surface(shape = RoundedCornerShape(4.dp), color = catColor.copy(0.15f)) {
+                                        Text("MAIN", style = MaterialTheme.typography.labelSmall, color = catColor,
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                                    }
+                                }
+                            }
+                            if (option.languageNames.isNotEmpty()) {
+                                Text("🌐 " + option.languageNames.joinToString(" · "),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        option.quality?.let { q ->
+                            Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                                Text(q, style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                            }
+                        }
+                    }
+                }
+                if (idx < channel.streamOptions.lastIndex) HorizontalDivider(modifier = Modifier.padding(start = 64.dp))
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fullscreen player
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+@androidx.annotation.OptIn(UnstableApi::class)
+@Composable
+private fun FullscreenPlayer(
+    channel: ChannelUiModel,
+    onExitFullscreen: () -> Unit,
+    onFavourite: () -> Unit,
+    onWidget: () -> Unit,
+    onSelectStream: (Int) -> Unit
+) {
+    val context   = LocalContext.current
+    val activity  = context as Activity
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val catColor  = categoryColorFor(channel)
+
+    val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    val maxVol       = remember { audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).toFloat() }
+
+    var isPlaying       by remember { mutableStateOf(true) }
+    var playerError     by remember { mutableStateOf<String?>(null) }
+    var isLocked        by remember { mutableStateOf(false) }
+    var showControls    by remember { mutableStateOf(true) }
+    var isRotLocked     by remember { mutableStateOf(false) }
+    var showFeedPicker  by remember { mutableStateOf(false) }
+    var showAudioPicker by remember { mutableStateOf(false) }
+    var audioTracks     by remember { mutableStateOf<List<AudioTrack>>(emptyList()) }
+
+    var volumeLevel by remember {
+        mutableStateOf(audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / maxVol)
+    }
+    var brightnessLevel by remember {
+        val cur = activity.window.attributes.screenBrightness
+        mutableStateOf(if (cur < 0) 0.5f else cur)
+    }
+
+    fun applyBrightness(value: Float) {
+        val lp = activity.window.attributes
+        lp.screenBrightness = value.coerceIn(0.01f, 1.0f)
+        activity.window.attributes = lp
+    }
+    fun applyVolume(value: Float) {
+        val safe = value.coerceAtLeast(0.05f)
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC,
+            (safe * maxVol).roundToInt().coerceIn(0, maxVol.roundToInt()), 0)
+    }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            audioManager.isStreamMute(AudioManager.STREAM_MUSIC)) {
+            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
+        }
+        if (audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) == 0) {
+            val v = (maxVol * 0.3f).roundToInt().coerceAtLeast(1)
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, v, 0)
+            volumeLevel = v / maxVol
+        }
+        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            activity.window.insetsController?.apply {
+                hide(android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.navigationBars())
+                systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            activity.window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            val lp = activity.window.attributes
+            lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            activity.window.attributes = lp
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                activity.window.insetsController?.show(
+                    android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.navigationBars())
+            } else {
+                @Suppress("DEPRECATION")
+                activity.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+            }
+        }
+    }
+
+    LaunchedEffect(showControls, isLocked) {
+        if (showControls && !isLocked) { delay(4000); showControls = false }
+    }
+
+    val exoPlayer = rememberExoPlayer(context, channel.streamUrl, true) { err ->
+        playerError = err; isPlaying = false
+    }
+    LaunchedEffect(exoPlayer) {
+        exoPlayer?.volume = 1f
+        exoPlayer?.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
+            override fun onTracksChanged(tracks: Tracks) {
+                audioTracks = extractAudioTracks(tracks)
+                if (audioTracks.isNotEmpty() && audioTracks.none { it.isSelected }) {
+                    selectAudioTrack(exoPlayer, audioTracks.first())
+                }
+            }
+        })
+    }
+    DisposableEffect(lifecycle) {
+        val obs = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> if (isPlaying) exoPlayer?.play()
+                Lifecycle.Event.ON_PAUSE  -> exoPlayer?.pause()
+                else -> {}
+            }
+        }
+        lifecycle.addObserver(obs)
+        onDispose { lifecycle.removeObserver(obs) }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .pointerInput(isLocked) {
+            if (!isLocked) {
+            detectVerticalDragGestures { change, dragAmount ->
+            val delta  = -dragAmount / size.height.toFloat()
+            val isLeft = change.position.x < size.width / 2f
+            if (isLeft) {
+                val b = (brightnessLevel + delta).coerceIn(0.01f, 1f)
+                brightnessLevel = b
+                applyBrightness(b)
+            } else {
+                val v = (volumeLevel + delta).coerceAtLeast(0.05f).coerceAtMost(1f)
+                volumeLevel = v
+                applyVolume(v)
+            }
+
+            showControls = true
+        }
+    }
+}
+            .pointerInput(Unit) {
+              detectTapGestures(
+                onTap = { showControls = !showControls }
+              )
+}
+    ) {
+        if (exoPlayer != null) {
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        player = exoPlayer; useController = false
+                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        EdgeLevelBars(brightnessLevel = brightnessLevel, volumeLevel = volumeLevel)
+
+        if (isLocked) {
+            AnimatedVisibility(visible = showControls, enter = fadeIn(), exit = fadeOut()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Surface(shape = RoundedCornerShape(50), color = Color.Black.copy(0.55f)) {
+                        IconButton(onClick = { isLocked = false; showControls = true },
+                            modifier = Modifier.padding(12.dp).size(48.dp)) {
+                            Icon(Icons.Filled.Lock, "Unlock", tint = Color.White, modifier = Modifier.size(32.dp))
+                        }
+                    }
+                }
+            }
+        } else {
+            AnimatedVisibility(visible = showControls, enter = fadeIn(), exit = fadeOut()) {
+                FullscreenControls(
+                    channel          = channel,
+                    isPlaying        = isPlaying,
+                    catColor         = catColor,
+                    isRotLocked      = isRotLocked,
+                    audioTracks      = audioTracks,
+                    onPlayPause      = { if (isPlaying) exoPlayer?.pause() else exoPlayer?.play() },
+                    onReplay         = { exoPlayer?.seekBack() },
+                    onForward        = { exoPlayer?.seekForward() },
+                    onExitFullscreen = onExitFullscreen,
+                    onLock           = { isLocked = true; showControls = false },
+                    onToggleRot      = {
+                        isRotLocked = !isRotLocked
+                        activity.requestedOrientation = if (isRotLocked)
+                            ActivityInfo.SCREEN_ORIENTATION_LOCKED
+                        else ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    },
+                    onOpenFeedPicker  = if (channel.hasMultipleFeeds) {{ showFeedPicker = true }} else null,
+                    onOpenAudioPicker = if (audioTracks.size > 1) {{ showAudioPicker = true }} else null
+                )
+            }
+            playerError?.let { err ->
+                ErrorOverlay(err) { playerError = null; exoPlayer?.prepare(); exoPlayer?.play() }
+            }
+        }
+    }
+
+    if (showFeedPicker) {
+        FeedPickerSheet(channel = channel, catColor = catColor,
+            onSelect  = { idx -> onSelectStream(idx); showFeedPicker = false },
+            onDismiss = { showFeedPicker = false })
+    }
+    if (showAudioPicker && exoPlayer != null) {
+        AudioPickerSheet(
+            audioTracks = audioTracks,
+            catColor    = catColor,
+            onSelect    = { track ->
+                selectAudioTrack(exoPlayer, track)
+                audioTracks = audioTracks.map {
+                    it.copy(isSelected = it.groupIndex == track.groupIndex && it.trackIndex == track.trackIndex)
+                }
+                showAudioPicker = false
+            },
+            onDismiss   = { showAudioPicker = false }
+        )
+    }
+}
+
+@Composable
+private fun FullscreenControls(
+    channel: ChannelUiModel,
+    isPlaying: Boolean,
+    catColor: Color,
+    isRotLocked: Boolean,
+    audioTracks: List<AudioTrack>,
+    onPlayPause: () -> Unit,
+    onReplay: () -> Unit,
+    onForward: () -> Unit,
+    onExitFullscreen: () -> Unit,
+    onLock: () -> Unit,
+    onToggleRot: () -> Unit,
+    onOpenFeedPicker: (() -> Unit)?,
+    onOpenAudioPicker: (() -> Unit)?
+) {
+    val selectedAudio = audioTracks.firstOrNull { it.isSelected }
+
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.40f))) {
+        // Top bar
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp).align(Alignment.TopCenter),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onExitFullscreen) {
+                Icon(Icons.Filled.FullscreenExit, "Exit fullscreen", tint = Color.White)
+            }
+            Spacer(Modifier.width(6.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(channel.name, style = MaterialTheme.typography.titleMedium, color = Color.White)
+                if (channel.hasMultipleFeeds) {
+                    channel.currentStream?.let { s ->
+                        Text(
+                            s.feedName + if (s.languageNames.isNotEmpty()) " · ${s.languageNames.first()}" else "",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(0.7f)
+                        )
+                    }
+                }
+            }
+            LiveBadge()
+            Spacer(Modifier.width(4.dp))
+
+            // Audio track picker button — shows current language code
+            if (onOpenAudioPicker != null) {
+                IconButton(onClick = onOpenAudioPicker) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Filled.RecordVoiceOver, "Audio Track", tint = catColor,
+                            modifier = Modifier.size(20.dp))
+                        selectedAudio?.language?.let { lang ->
+                            Text(lang.uppercase(), style = MaterialTheme.typography.labelSmall,
+                                color = catColor)
+                        }
+                    }
+                }
+            }
+            // Feed picker button
+            if (onOpenFeedPicker != null) {
+                IconButton(onClick = onOpenFeedPicker) {
+                    Icon(Icons.Filled.Subtitles, "Change Feed", tint = catColor)
+                }
+            }
+            // Rotation lock
+            IconButton(onClick = onToggleRot) {
+                Icon(
+                    imageVector        = if (isRotLocked) Icons.Filled.ScreenLockRotation else Icons.Filled.ScreenRotation,
+                    contentDescription = "Rotation",
+                    tint               = if (isRotLocked) catColor else Color.White
+                )
+            }
+            // Screen lock
+            IconButton(onClick = onLock) {
+                Icon(Icons.Outlined.LockOpen, "Lock", tint = Color.White)
+            }
+        }
+
+        // Center controls
+        Row(
+            modifier = Modifier.align(Alignment.Center),
+            horizontalArrangement = Arrangement.spacedBy(28.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onReplay, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Filled.Replay10, "Replay 10s", tint = Color.White, modifier = Modifier.size(36.dp))
+            }
+            FilledIconButton(
+                onClick  = onPlayPause,
+                modifier = Modifier.size(64.dp),
+                colors   = IconButtonDefaults.filledIconButtonColors(containerColor = catColor)
+            ) {
+                Icon(if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    null, modifier = Modifier.size(40.dp))
+            }
+            IconButton(onClick = onForward, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Filled.Forward10, "Forward 10s", tint = Color.White, modifier = Modifier.size(36.dp))
+            }
+        }
+
+        Text(
+            text     = "← Brightness  |  Volume →",
+            style    = MaterialTheme.typography.labelSmall,
+            color    = Color.White.copy(0.45f),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp)
+        )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Edge level bars
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun EdgeLevelBars(brightnessLevel: Float, volumeLevel: Float) {
+    Box(Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxHeight().width(5.dp).align(Alignment.CenterStart).padding(vertical = 60.dp)) {
+            Box(Modifier.fillMaxSize().background(Color.White.copy(0.12f), RoundedCornerShape(3.dp)))
+            Box(Modifier.fillMaxWidth().fillMaxHeight(brightnessLevel.coerceIn(0.01f, 1f)).align(Alignment.BottomStart).background(Color(0xFFFBD38D).copy(0.85f), RoundedCornerShape(3.dp)))
+        }
+        Box(modifier = Modifier.fillMaxHeight().width(5.dp).align(Alignment.CenterEnd).padding(vertical = 60.dp)) {
+            Box(Modifier.fillMaxSize().background(Color.White.copy(0.12f), RoundedCornerShape(3.dp)))
+            Box(Modifier.fillMaxWidth().fillMaxHeight(volumeLevel.coerceIn(0.05f, 1f)).align(Alignment.BottomStart).background(Color(0xFF4F8EF7).copy(0.85f), RoundedCornerShape(3.dp)))
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared overlays
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun ThumbnailOverlay(channel: ChannelUiModel, catColor: Color, onPlay: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(catColor.copy(0.08f)), contentAlignment = Alignment.Center) {
+        if (channel.logoUrl != null)
+            AsyncImage(model = channel.logoUrl, contentDescription = channel.name,
+                contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(32.dp))
+        else Text(channel.countryFlag, style = MaterialTheme.typography.displayLarge)
+    }
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(0.30f)), contentAlignment = Alignment.Center) {
+        FilledIconButton(onClick = onPlay, modifier = Modifier.size(56.dp),
+            colors = IconButtonDefaults.filledIconButtonColors(containerColor = catColor)) {
+            Icon(Icons.Filled.PlayArrow, "Play", modifier = Modifier.size(34.dp))
+        }
+    }
+}
+
+@Composable
+private fun ErrorOverlay(message: String, onRetry: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(0.75f)), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Filled.ErrorOutline, null, tint = Color(0xFFFC8181), modifier = Modifier.size(36.dp))
+            Spacer(Modifier.height(8.dp))
+            Text(message, style = MaterialTheme.typography.bodySmall, color = Color.White)
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = onRetry) { Text("Retry", color = Color.White) }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ExoPlayer helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Extract all audio track groups from the current Tracks object. */
+@androidx.annotation.OptIn(UnstableApi::class)
+fun extractAudioTracks(tracks: Tracks): List<AudioTrack> {
+    val result = mutableListOf<AudioTrack>()
+    tracks.groups.forEachIndexed { groupIndex, group ->
+        if (group.type != C.TRACK_TYPE_AUDIO) return@forEachIndexed
+        for (trackIndex in 0 until group.length) {
+            val format = group.getTrackFormat(trackIndex)
+            val isSelected = group.isTrackSelected(trackIndex)
+            val lang = format.language?.takeIf { it.isNotBlank() && it != "und" }
+            // Build a human-readable label
+            val label = when {
+                lang != null -> {
+                    try {
+                        val locale = Locale.forLanguageTag(lang)
+                        locale.getDisplayLanguage(Locale.ENGLISH)
+                            .takeIf { it.isNotBlank() && it != lang } ?: lang.uppercase()
+                    } catch (e: Exception) { lang.uppercase() }
+                }
+                format.label != null && format.label!!.isNotBlank() -> format.label!!
+                else -> "Audio ${result.size + 1}"
+            }
+            result.add(
+                AudioTrack(
+                    groupIndex   = groupIndex,
+                    trackIndex   = trackIndex,
+                    language     = lang,
+                    label        = label,
+                    channelCount = format.channelCount,
+                    sampleRate   = format.sampleRate,
+                    isSelected   = isSelected
+                )
+            )
+        }
+    }
+    return result
+}
+
+/** Force ExoPlayer to play a specific audio track and disable automatic selection for audio. */
+@androidx.annotation.OptIn(UnstableApi::class)
+fun selectAudioTrack(player: ExoPlayer, track: AudioTrack) {
+    val currentTracks = player.currentTracks
+    val group = currentTracks.groups.getOrNull(track.groupIndex) ?: return
+    player.trackSelectionParameters = player.trackSelectionParameters
+        .buildUpon()
+        // Override: select exactly this group+track, disable auto for audio
+        .setOverrideForType(
+            androidx.media3.common.TrackSelectionOverride(group.mediaTrackGroup, track.trackIndex)
+        )
+        // Ensure audio is never disabled
+        .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+        .build()
+    // Make sure player volume is audible
+    player.volume = 1f
+}
+
+@androidx.annotation.OptIn(UnstableApi::class)
+@Composable
+private fun rememberExoPlayer(
+    context: Context,
+    streamUrl: String?,
+    autoPlay: Boolean,
+    onError: (String) -> Unit
+): ExoPlayer? {
+    val playerRef = remember { mutableStateOf<ExoPlayer?>(null) }
+
+    DisposableEffect(streamUrl) {
+        if (streamUrl == null) {
+            playerRef.value = null
+            return@DisposableEffect onDispose {}
+        }
+
+        val renderersFactory = DefaultRenderersFactory(context).apply {
+            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+        }
+
+        val player = ExoPlayer.Builder(context, renderersFactory).build().apply {
+            volume = 1f
+            val dataSourceFactory = DefaultHttpDataSource.Factory()
+                .setUserAgent("Mozilla/5.0 (Linux; Android) VLC/3.0")
+                .setDefaultRequestProperties(
+                    mapOf(
+                        "Accept"     to "*/*",
+                        "Connection" to "keep-alive"
+                    )
+                )
+                .setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(15_000)
+                .setReadTimeoutMs(15_000)
+
+            val src = HlsMediaSource.Factory(dataSourceFactory)
+                .setAllowChunklessPreparation(true)
+                .createMediaSource(MediaItem.fromUri(Uri.parse(streamUrl)))
+
+            setMediaSource(src)
+            prepare()
+            playWhenReady = autoPlay
+            trackSelectionParameters = trackSelectionParameters.buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                .build()
+            addListener(object : Player.Listener {
+                override fun onPlayerError(error: PlaybackException) {
+                    onError(error.message ?: "Playback error")
+                }
+            })
+        }
+
+        playerRef.value = player
+
+        onDispose {
+            player.stop()
+            player.release()
+            playerRef.value = null
+        }
+    }
+
+    return playerRef.value
+}
+
+private fun categoryColorFor(channel: ChannelUiModel): Color = when {
+    channel.categories.any { it in listOf("music", "entertainment") } -> MusicPurple
+    channel.categories.any { it in listOf("science", "education", "kids") } -> ScienceBlue
+    channel.country.contains("Nepal", ignoreCase = true) -> NepalRed
+    channel.country.contains("India", ignoreCase = true) -> IndiaOrange
+    else -> Primary
+}
